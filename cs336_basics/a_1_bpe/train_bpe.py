@@ -12,7 +12,9 @@
 # - merges: list[tuple[bytes, bytes]]  A list of BPE merges produced from training. Each list item is a tuple of bytes (<token1>, <token2>), representing that <token1> was merged with <token2>. The merges should be ordered by order of creation.
 
 # 讲义上给出的预分词正则表达式，大致逻辑如下：
+import heapq
 import os
+from collections import Counter, defaultdict
 
 import regex as re
 
@@ -28,50 +30,57 @@ PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s
 
 
 def _insert_vocab(idx: int, token: bytes, vocab: dict[int, bytes]):
-    if vocab.get(idx, None) is not None:
-        raise ValueError(f"idx {idx} already exists in vocab")
     vocab[idx] = token
 
 
-def _find_pairs(token_list: list[bytes], pairs: dict[tuple[bytes, bytes], int], count: int) -> dict[tuple[bytes, bytes], int]:
+class _PairHeapEntry:
+    __slots__ = ("frequency", "pair")
 
-    _len = len(token_list) - 1
-    for idx in range(_len):
-        pair = (token_list[idx], token_list[idx + 1])
-        pairs[pair] = pairs.get(pair, 0) + count
+    def __init__(self, frequency: int, pair: tuple[bytes, bytes]):
+        self.frequency = frequency
+        self.pair = pair
 
-    return pairs
-
-
-def _find_max_pair(pairs: dict[tuple[bytes, bytes], int]) -> tuple[tuple[bytes, bytes], int]:
-    # 找到频率最高的pair
-    # 如果有多个频率一样高的pair，选字典序最大的
-    max_pair, max_freq = max(
-        pairs.items(),
-        key=lambda item: (
-            item[1],
-            item[0],
-        ),
-    )
-    return max_pair, max_freq
+    def __lt__(self, other: "_PairHeapEntry") -> bool:
+        # 找出频率最高的pair，频率一样的时候比较字典序
+        return (self.frequency, self.pair) > (other.frequency, other.pair)
 
 
-def _merge_pair(token_list, pair: tuple[bytes, bytes]):
-    pair_0 = pair[0]
-    pair_1 = pair[1]
-    for (sub_token_list, _freq) in token_list:
-        idx = 0
-        while True:
-            if idx >= len(sub_token_list) - 1:
-                break
-            current = sub_token_list[idx]
-            next = sub_token_list[idx + 1]
-            if current == pair_0 and next == pair_1:
-                # 合并pair_0和pair_1
-                sub_token_list[idx] = pair_0 + pair_1
-                del sub_token_list[idx + 1]
-                continue
-            idx += 1
+def _count_pairs(token_list: list[bytes]) -> Counter[tuple[bytes, bytes]]:
+    return Counter(zip(token_list, token_list[1:]))
+
+
+def _merge_pair(token_list: list[bytes], pair: tuple[bytes, bytes]) -> None:
+    pair_0, pair_1 = pair
+    merged = pair_0 + pair_1
+    read_point = 0
+    write_point = 0
+    token_count = len(token_list)
+
+    while read_point < token_count:
+        if (
+            read_point + 1 < token_count
+            and token_list[read_point] == pair_0
+            and token_list[read_point + 1] == pair_1
+        ):
+            token_list[write_point] = merged
+            read_point += 2
+        else:
+            token_list[write_point] = token_list[read_point]
+            read_point += 1
+        write_point += 1
+
+    del token_list[write_point:]
+
+
+def _pop_max_pair(
+    pair_heap: list[_PairHeapEntry],
+    pair_counts: dict[tuple[bytes, bytes], int],
+) -> tuple[tuple[bytes, bytes], int] | None:
+    while pair_heap:
+        entry = heapq.heappop(pair_heap)
+        if pair_counts.get(entry.pair) == entry.frequency:
+            return entry.pair, entry.frequency
+    return None
 
 
 # output: vocab, merges
@@ -113,47 +122,64 @@ def train_bpe_impl(
                 _count = pre_token_map.get(reg_item, 0) + 1
                 pre_token_map[reg_item] = _count
 
-            
-
     # 这是一个二维数组，处理token，还要处理预分词的边界
     token_list = []
-    for (pre_token, pr_token_freq) in pre_token_map.items():
+    for pre_token, pr_token_freq in pre_token_map.items():
         encoded_token = pre_token.encode("utf-8")
-        _arr = [bytes([_byte]) for _byte in encoded_token]   
+        _arr = [bytes([_byte]) for _byte in encoded_token]
         token_list.append((_arr, pr_token_freq))
 
-    # 中止条件：1)vocab满了，2)频率小于xx，3)没有pair了
+    # pair 频次只全量计算一次；后续每轮仅更新包含被合并 pair 的预分词项。
+    pair_counts: dict[tuple[bytes, bytes], int] = {}
+    pair_to_words: dict[tuple[bytes, bytes], set[int]] = defaultdict(set)
+    for word_idx, (sub_token_list, word_freq) in enumerate(token_list):
+        for pair, occurrences in _count_pairs(sub_token_list).items():
+            pair_counts[pair] = pair_counts.get(pair, 0) + occurrences * word_freq
+            pair_to_words[pair].add(word_idx)
 
-    while True:
-        token_pairs = {}
-        # 每个元素是一个tuple：(pair, count)
-        pair_maps = []
+    pair_heap = [_PairHeapEntry(freq, pair) for pair, freq in pair_counts.items()]
+    heapq.heapify(pair_heap)
 
-        for (sub_token_list, count) in token_list:
-            token_pairs = _find_pairs(sub_token_list, token_pairs, count)
+    while len(vocab) < vocab_size:
+        max_item = _pop_max_pair(pair_heap, pair_counts)
+        if max_item is None:
+            break
+        max_pair, freq = max_item
+        if freq < MAX_FREQ:
+            break
 
-        for (pair, count) in pair_maps:
-            token_pairs[pair] = token_pairs.get(pair, 0) + count
-
-
-        max_pair, freq = _find_max_pair(token_pairs)
         merges.append(max_pair)
         _insert_vocab(vocab_idx, max_pair[0] + max_pair[1], vocab)
         vocab_idx += 1
-        _merge_pair(token_list, max_pair)
 
-        if len(vocab) >= vocab_size:
-            break
-        if freq <= MAX_FREQ:
-            break
-        # 如果下一轮找不到pair了，就结束
-        if len(token_pairs) < 2:
-            print("Token Pairs Break")
-            break
+        affected_words = tuple(pair_to_words.pop(max_pair, ()))
+        changed_pairs = {max_pair}
+
+        for word_idx in affected_words:
+            sub_token_list, word_freq = token_list[word_idx]
+            old_counts = _count_pairs(sub_token_list)
+            _merge_pair(sub_token_list, max_pair)
+            new_counts = _count_pairs(sub_token_list)
+            changed_pairs.update(old_counts)
+            changed_pairs.update(new_counts)
+
+            for pair, occurrences in old_counts.items():
+                pair_counts[pair] -= occurrences * word_freq
+                word_ids = pair_to_words.get(pair)
+                if word_ids is not None:
+                    word_ids.discard(word_idx)
+                    if not word_ids:
+                        pair_to_words.pop(pair, None)
+
+            for pair, occurrences in new_counts.items():
+                pair_counts[pair] = pair_counts.get(pair, 0) + occurrences * word_freq
+                pair_to_words[pair].add(word_idx)
+
+        for pair in changed_pairs:
+            pair_freq = pair_counts.get(pair, 0)
+            if pair_freq > 0:
+                heapq.heappush(pair_heap, _PairHeapEntry(pair_freq, pair))
+            else:
+                pair_counts.pop(pair, None)
 
     return vocab, merges
-
-
-# 目前的性能是1.19秒完成测试
-# 其实还有挺多可以优化的空间的，比如说对于token_list有大量可以跳过的扫描、多线程等
-# 但是为了更快进入后面的学习步骤，我就先不继续优化了
