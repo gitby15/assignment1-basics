@@ -56,16 +56,15 @@ class Tokenizer:
         self.merges = list(merges)
         self.special_tokens = special_tokens or []
 
-        vocab_values = set(self.vocab.values())
+        # 保险起见，检查一次special_tokens
         for special_token in self.special_tokens:
-            encoded_token = special_token.encode("utf-8")
-            if encoded_token not in vocab_values:
-                self.vocab[len(self.vocab)] = encoded_token
-                vocab_values.add(encoded_token)
+            encoded = special_token.encode('utf-8')
+            if encoded not in self.vocab.values():
+                self.vocab[len(self.vocab)] = encoded
 
         self.token_to_id = {token: token_id for token_id, token in self.vocab.items()}
         # 记录每一个pair和他的顺序
-        self.merge_ranks = {pair: rank for rank, pair in enumerate(self.merges)}
+        self.merge_ranks = {pair: rank for rank, pair in enumerate(self.merges)}        
 
         escaped_special_tokens = [
             re.escape(token)
@@ -76,6 +75,7 @@ class Tokenizer:
             if escaped_special_tokens
             else None
         )
+        self.max_token_len = max(len(token) for token in self.vocab.values()) or 0
 
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
@@ -98,62 +98,87 @@ class Tokenizer:
 
 
     def encode(self, text: str) -> list[int]:
-        chunks = (
-            self.special_tokens_reg.split(text)
-            if self.special_tokens_reg is not None
-            else [text]
-        )
-        special_tokens = set(self.special_tokens)
-        result: list[int] = []
+        return list(self.encode_iterable([text]))
 
-        for chunk in chunks:
-            if not chunk:
-                continue
-            # special token不拼接，直接映射
-            if chunk in special_tokens:
-                result.append(self.token_to_id[chunk.encode("utf-8")])
-                continue
+    def _handle_pre_token(self, pre_token: str) -> list[int]:
+        tokens = [bytes([byte]) for byte in pre_token.encode('utf-8')]
+        while len(tokens) >= 2:
+            pair_list = zip(tokens, tokens[1:])
+            best_pair = min(pair_list, key=lambda pair: self.merge_ranks.get(pair, float('inf')))
+            if best_pair not in self.merge_ranks:
+                break
+            index = 0
+            boundary  = len(tokens) -1
+            merged_tokens = []
+            while index < boundary:
+                pair = (tokens[index], tokens[index + 1])
+                if pair == best_pair:
+                    _token = pair[0] + pair[1]
+                    merged_tokens.append(_token)
+                    index += 2
+                else:
+                    _token = tokens[index]
+                    merged_tokens.append(_token)
+                    index += 1
+            # 补上最后一个元素
+            if index == boundary:
+                merged_tokens.append(tokens[-1])
+            tokens = merged_tokens
+        return [self.token_to_id[token] for token in tokens]
 
+    # (token_id, splited_idx)
+    def _handle_buffer_chunk(self, safety_chunk: str, skip_last = True) -> Iterator[tuple[int, int]]:
+        # 这是相对safety_chunk的位置
+        splited_idx = 0
+        for pre_token_match in re.finditer(PAT, safety_chunk):
+            chunk_len = len(safety_chunk)
+            # 给尾巴保留安全距离
+            if skip_last and chunk_len - pre_token_match.end() <= self.max_token_len:
+                break
+            pre_token = pre_token_match.group()
+            splited_idx = pre_token_match.end()
+            for token_id in self._handle_pre_token(pre_token):
+                yield (token_id, splited_idx)
             
-            for match in re.finditer(PAT, chunk):
-                encoded = match.group().encode("utf-8")
-                # 把pre_token拆成多个字节
-                tokens = [bytes([byte]) for byte in encoded]
-
-                # 对单个token完成一次merge，每个token都会尝试拼装到最长的结果
-                # 对于merges数组，需要从左往右依次拼接
-                while len(tokens) >= 2:
-
-                    # 找出优先级最高的pair，如果没找到，就会返回前两个token
-                    best_pair = min(
-                        zip(tokens, tokens[1:]),
-                        key=lambda pair: self.merge_ranks.get(pair, float("inf")),
-                    )
-                    # 如果前两个token也不是pair，就不用继续往下找了
-                    if best_pair not in self.merge_ranks:
-                        break
-
-                    merged_tokens: list[bytes] = []
-                    index = 0
-                    tokens_len = len(tokens)
-                    while index < tokens_len:
-                        if (
-                            index + 1 < tokens_len
-                            and (tokens[index], tokens[index + 1]) == best_pair
-                        ):
-                            merged_tokens.append(best_pair[0] + best_pair[1])
-                            index += 2
-                        else:
-                            merged_tokens.append(tokens[index])
-                            index += 1
-                    tokens = merged_tokens
-
-                result.extend(self.token_to_id[token] for token in tokens)
-        return result
+        
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+        buffer_chunk = ""
         for text in iterable:
-            yield from self.encode(text)
+            buffer_chunk += text
+            
+            if self.special_tokens_reg is None:
+                # 这是相对buffer_chunk的位置
+                last_realative_idx = 0
+                for token_id, _idx in self._handle_buffer_chunk(buffer_chunk):
+                    last_realative_idx = _idx
+                    yield token_id
+                buffer_chunk = buffer_chunk[last_realative_idx:]
+            
+            else:
+                # 这是相对buffer_chunk的位置
+                last_realative_idx = 0
+                for safety_chunk_match in re.finditer(self.special_tokens_reg, buffer_chunk):
+                    safety_chunk = buffer_chunk[last_realative_idx:safety_chunk_match.start()]
+                    special_token = buffer_chunk[safety_chunk_match.start():safety_chunk_match.end()]
+                    last_realative_idx = safety_chunk_match.end()
+                    for token_id, _ in self._handle_buffer_chunk(safety_chunk, False):
+                        yield token_id
+                    yield self.token_to_id[special_token.encode("utf-8")]
+                # 如果这一次没有special_token，就先消化一批
+                if last_realative_idx == 0:
+                    for token_id, _idx in self._handle_buffer_chunk(buffer_chunk):
+                        last_realative_idx = _idx
+                        yield token_id
+
+                    
+                buffer_chunk = buffer_chunk[last_realative_idx:]
+        # 收尾
+        if buffer_chunk:
+            for token_id, _ in self._handle_buffer_chunk(buffer_chunk, False):
+                yield token_id
+        
+
 
     def decode(self, ids: list[int]) -> str:
         token_bytes = b"".join(self.vocab[token_id] for token_id in ids)
