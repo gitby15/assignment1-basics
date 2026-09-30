@@ -20,6 +20,7 @@ dependencies = [
     "ty>=0.0.26",
     "ruff>=0.15.8",
     "snakeviz>=2.2.2",
+    "huggingface-hub>=1.33.0",
 ]
 
 [build-system]

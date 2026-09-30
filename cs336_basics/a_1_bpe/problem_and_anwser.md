@@ -64,16 +64,58 @@ Resource requirements: ≤ 30 minutes (no GPUs), ≤ 30 GB RAM
 Hint: You should be able to get under 2 minutes for BPE training using multiprocessing during pre-tokenization and the following two facts:
 a) The <|endoftext|> token delimits documents in the data files
 b) The <|endoftext|> token is handled as a special case before the BPE merges are applied.
-Deliverable: A one-to-two sentence response
+```bash
+vocab_size: 10000
+最长的token:  accomplishment
+Max RSS: 271.66015625 MB
+总耗时: 37.9819 s
+用户态 CPU 时间: 15.971055s
+内核态 CPU 时间: 1.420937s
+# 之所以只需要37秒，主要是因为我的设备性能比较好（Intel(R) Xeon(R) Platinum 8457C）
+
+```
 
 ### (b) Profile your code. What part of the tokenizer training process takes the most time? 
-Deliverable: A one-to-two sentence response
+_find_pair和merge_pair是耗时最多的，单次调用的时间都很短，但是调用次数很高
 
 ## Problem (train_bpe_expts_owt):  BPE Training on OpenWebText (2 points)
 
 ### (a) Train a byte-level BPE tokenizer on the OpenWebText dataset, using a maximum vocabulary size of 32,000. Serialize the resulting vocabulary and merges to disk for further inspection. What is the longest token in the vocabulary? Does it make sense?
 Resource requirements: ≤ 12 hours (no GPUs), ≤ 100 GB RAM
-Deliverable: A one-to-two sentence response
+Todo: 下载owt-sample数据集, 下载完成后再回来继续做
 
 ### (b) Compare and contrast the tokenizer that you get training on TinyStories versus OpenWebText.
 Deliverable: A one-to-two sentence response
+Todo: 下载owt-sample数据集, 下载完成后再回来继续做
+
+## Problem (tokenizer):  Implementing the tokenizer (15 points)
+Deliverable: Implement a Tokenizer class that, given a vocabulary and a list of merges, encodes text into integer IDs and decodes integer IDs into text. Your tokenizer should also support userprovided special tokens (appending them to the vocabulary if they aren’t already there). We recommend the following interface:
+```python
+def __init__(self, vocab, merges, special_tokens=None) 
+"""
+Construct a tokenizer from a given vocabulary, list of merges, and (optionally) a list of special tokens. This function should accept the following parameters:
+- vocab: dict[int, bytes]  
+- merges: list[tuple[bytes, bytes]]  
+- special_tokens: list[str] | None = None  
+"""
+def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None) 
+"""
+Class method that constructs and returns a Tokenizer from a serialized vocabulary and list of merges (in the same format that your BPE training code output) and (optionally) a list of special tokens. This method should accept the following additional parameters:
+- vocab_filepath: str  
+- merges_filepath: str  
+- special_tokens: list[str] | None = None  
+"""
+def encode(self, text: str) -> list[int] 
+"""
+Encode an input text into a sequence of token IDs.
+"""
+def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]
+"""
+Given an iterable of strings (e.g., a Python file handle)
+return a generator that lazily yields token IDs. This is required for memory-efficient tokenization of large files that we cannot directly load into memory.
+"""
+def decode(self, ids: list[int]) -> str
+"""
+Decode a sequence of token IDs into text
+"""
+```
