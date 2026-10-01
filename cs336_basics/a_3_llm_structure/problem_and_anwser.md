@@ -15,3 +15,5 @@ def forward(self, x: torch.Tensor) -> torch.Tensor
 Apply the linear transformation to the input
 """
 ```
+完成了Linear的实现：
+1. 
