@@ -26,6 +26,7 @@ def test_linear(numpy_snapshot, ts_state_dict, in_embeddings, d_model, d_ff):
         weights=w1_weight,
         in_features=in_embeddings,
     )
+    print(f"w1_weight shape:{w1_weight.shape} | d_model:{d_model} | d_ff:{d_ff} | in_embeddings shape:{in_embeddings.shape}")
     numpy_snapshot.assert_match(output)
 
 
