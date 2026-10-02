@@ -28,7 +28,7 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-    from cs336_basics.a_3_llm_structure.tim_linear import Linear
+    from cs336_basics.a_3_llm_structure.linear import Linear
     linear = Linear(d_in, d_out)
     linear.weight.data = weights
     return linear(in_features)
@@ -53,7 +53,10 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.embedding import Embed
+    embed = Embed(vocab_size, d_model)
+    embed.weight.data = weights
+    return embed(token_ids)
 
 
 def run_swiglu(
@@ -380,7 +383,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.rmsnorm import RMSNorm
+    rmsnorm = RMSNorm(d_model, eps)
+    rmsnorm.weight.data = weights
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:

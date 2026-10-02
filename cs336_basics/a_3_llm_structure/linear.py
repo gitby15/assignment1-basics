@@ -33,6 +33,7 @@ class Linear(nn.Module):
     # 在讲义中，数学的计算公式，希望是Y = W@x
     # 但是x的形状会是(..., d_in)，所以实际上会变成 Y = x @ W.T
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        assert self._checked_weight_shape == self.swight.shape
         return einsum(self.weight, x, 'out_f in_f, ... in_f -> ... out_f')
 
 
