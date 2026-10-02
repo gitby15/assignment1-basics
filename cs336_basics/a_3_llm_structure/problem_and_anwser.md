@@ -15,6 +15,7 @@ def forward(self, x: torch.Tensor) -> torch.Tensor
 Apply the linear transformation to the input
 """
 ```
+[Deliver]
 完成了Linear的实现：
 1. 接受列向量的表示方法
 2. 权重初始化，N(mean, std) => mean = 0, std = sqrt(2 / (in_features + out_features))
@@ -44,6 +45,7 @@ To test your implementation, implement the test adapter at [adapters.run_embeddi
 ```bash
 uv run pytest -k test_embedding.
 ```
+[Deliver]
 完成了Embedding的实现
 1. 本质上是一个查表动作
 2. 完成了初始化
@@ -63,3 +65,34 @@ def forward(self, x: torch.Tensor) -> torch.Tensor
 ```
 Note: Remember to upcast your input to torch.float32 before performing the normalization(and later downcast to the original dtype), as described above.
 To test your implementation, implement the test adapter at [adapters.run_rmsnorm] . Then, run uv run pytest -k test_rmsnorm.
+[Deliver]:
+完成了rms_norm，并通过测试
+1. 里面是一个rms计算+权重缩放
+2. rms就是求平方 -> 求均值 -> 开方 -> 加一个小数字防止0除
+3. 用一个可训练的权重做缩放
+4. x/self._rms(x) * self.weight
+
+# Problem (positionwise_feedforward):  Implement the position-wise feed-forward network (2points)
+Deliverable: Implement the SwiGLU feed-forward network, composed of a SiLU activation
+function and a GLU.
+Note: in this particular case, you should feel free to use torch.sigmoid in your implementation
+for numerical stability.
+You should set 𝑑ff to approximately 8/3 × 𝑑model in your implementation, while ensuring that the dimensionality of the inner feed-forward layer is a multiple of 64 to make good use of your hardware. To test your implementation against our provided tests, you will need to implement the test adapter at [adapters.run_swiglu] . Then, run uv run pytest -k test_swiglu to test your implementation.
+[Deliver]:
+Todo
+
+# Problem (rope):  Implement RoPE (2 points)
+Deliverable: Implement a class RotaryPositionalEmbedding that applies RoPE to the input tensor.
+The following interface is recommended
+```python
+def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None) 
+# Construct the RoPE module and create buffers if needed.
+# - theta: float  Θ value for the RoPE
+# - d_k: int  dimension of query and key vectors
+# - max_seq_len: int  Maximum sequence length that will be input
+# - device: torch.device | None = None  Device to store the buffer on
+def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor
+# Process an input tensor of shape (..., seq_len, d_k) and return a tensor of the same shape. Note that you should tolerate 𝑥 with an arbitrary number of batch dimensions. You should assume that the token positions are a tensor of shape (..., seq_len) specifying the token positions of 𝑥 along the sequence dimension.
+```
+You should use the token positions to slice your (possibly precomputed) cos and sin tensors along the sequence dimension.
+To test your implementation, complete [adapters.run_rope] and make sure it passes uv run pytest -k test_rope.
