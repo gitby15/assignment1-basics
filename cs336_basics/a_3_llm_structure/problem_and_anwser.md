@@ -96,3 +96,84 @@ def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tenso
 ```
 You should use the token positions to slice your (possibly precomputed) cos and sin tensors along the sequence dimension.
 To test your implementation, complete [adapters.run_rope] and make sure it passes uv run pytest -k test_rope.
+[Deliver:]
+Todo
+
+# Problem (scaled_dot_product_attention):  Implement scaled dot-product attention (5points)
+Deliverable: Implement the scaled dot-product attention function. Your implementation should handle keys and queries of shape (batch_size, ..., seq_len, d_k) and values of shape (batch_size, ..., seq_len, d_v), where ... represents any number of other batch-like dimensions (if provided). The implementation should return an output with the shape (batch_size, ..., seq_len, d_v). See Section 3.2 for a discussion on batch-like dimensions.
+Your implementation should also support an optional user-provided boolean mask of shape (seq_len, seq_len). The attention probabilities of positions with a mask value of True should collectively sum to 1, and the attention probabilities of positions with a mask value of False should be zero
+
+To test your implementation against our provided tests, you will need to implement the test adapter at [adapters.run_scaled_dot_product_attention] . uv run pytest -k
+test_scaled_dot_product_attention tests your implementation on third-order input tensors, while `uv run pytest -k test_4d_scaled_dot_product_attention` tests your implementation on fourthorder input tensors.
+[Deliver]:
+手写了一个attention计算模块，现在还只支持传统的注意力计算，对于GQA、以及其他注意力机制还没支持
+
+# Problem (multihead_self_attention):  Implement causal multi-head self-attention (5 points)
+Deliverable: Implement causal multi-head self-attention as a torch.nn.Module. Your implementation should accept (at least) the following parameters:
+- d_model: int Dimensionality of the Transformer block inputs.
+- num_heads: int Number of heads to use in multi-head self-attention.
+Following [A. Vaswani et al.][8], set 𝑑𝑘 = 𝑑𝑣 = 𝑑model/ℎ. To test your implementation against our provided tests, implement the test adapter at [adapters.run_multihead_self_attention] . Then, run `uv run pytest -k test_multihead_self_attention` to test your implementation.
+[Deliver]:
+手写了MHA，因为之前做过，所以比较顺利，token_positions应该是为了后面kv_cache设计的
+我觉得后面可能要回来分析性能，这里对QKV都做了形状变换，后面需要测试一下，这里的形状变化后，只是调整了步长和shape，还是在内存中做了重新排列
+
+# Problem (transformer_block):  Implement the Transformer block (3 points)
+Implement the pre-norm Transformer block as described in Section 3.4 and illustrated in Figure 2.
+Your Transformer block should accept (at least) the following parameters.
+- `d_model`: int Dimensionality of the Transformer block inputs.
+- `num_heads`: int Number of heads to use in multi-head self-attention.
+- `d_ff`: int Dimensionality of the position-wise feed-forward inner layer.
+To test your implementation, implement the adapter [adapters.run_transformer_block] . Then
+run `uv run pytest -k test_transformer_block` to test your implementation.
+Deliverable: Transformer block code that passes the provided tests.
+[Deliver]:
+完成了Transformer Block，把前面结果组件拼接到一起，残差链接 + 归一化 + 激活函数 + FFN
+
+# Problem (transformer_lm):  Implementing the Transformer LM (3 points)
+Time to put it all together! Implement the Transformer language model as described in Section 3.1 and illustrated in Figure 1. At minimum, your implementation should accept all the aforementioned construction parameters for the Transformer block, as well as these additional
+parameters:
+- `vocab_size`: int The size of the vocabulary, necessary for determining the dimensionality of the token embedding matrix.
+- `context_length`: int The maximum context length, necessary for determining the dimensionality of the RoPE sin and cos buffer.
+- `num_layers`: int The number of Transformer blocks to use.
+To test your implementation against our provided tests, you will first need to implement the test
+adapter at [adapters.run_transformer_lm] . Then, run `uv run pytest -k test_transformer_lm` to
+test your implementation.
+Deliverable: A Transformer LM module that passes the above tests
+[Deliver]:
+把所有零件都拼起来
+
+
+
+# Problem (transformer_accounting):  Transformer LM resource accounting (5 points)
+> Rule: Given 𝐴 ∈ ℝ(𝑚×𝑛) and 𝐵 ∈ ℝ(𝑛×𝑝), the matrix-matrix product 𝐴𝐵 requires 2𝑚𝑛𝑝 FLOPs.
+(a)Consider a GPT-2 XL-sized model using our assignment architecture, which has the following configuration:
+- `vocab_size`:  50,257
+- `context_length`:  1,024
+- `num_layers`:  48
+- `d_model`:  1,600
+- `num_heads`:  25
+- `d_ff`:  4,288 (the nearest multiple of 64 to 8/3 × 1, 600)
+Suppose we constructed our model using this configuration. How many trainable parameters
+would our model have? Assuming each parameter is represented using single-precision floating
+point, how much memory is required to just load this model?
+Deliverable: A one-to-two sentence response.
+
+(b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. How many FLOPs do these matrix multiplies require in total? Assume that our input sequence has context_length tokens.
+Deliverable: A list of matrix multiplies (with descriptions), and the total number of FLOPs
+required.
+
+(c) Based on your analysis above, which parts of the model require the most FLOPs?
+Deliverable: A one-to-two sentence response.
+
+(d) Repeat your analysis with GPT-2 small (12 layers, 768 d_model, 12 heads), GPT-2 medium
+(24 layers, 1024 d_model, 16 heads), and GPT-2 large (36 layers, 1280 d_model, 20 heads). As
+the model size increases, which parts of the Transformer LM take up proportionally more or
+less of the total FLOPs?
+Deliverable: For each model, provide a breakdown of model components and its associated
+FLOPs (as a proportion of the total FLOPs required for a forward pass). In addition, provide
+a one-to-two sentence description of how varying the model size changes the proportional
+FLOPs of each component.
+
+(e) Take GPT-2 XL and increase the context length to 16,384. How does the total FLOPs for one forward pass change? How does the relative contribution of FLOPs of the model components
+change?
+Deliverable: A one-to-two sentence response.

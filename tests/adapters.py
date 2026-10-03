@@ -115,7 +115,8 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.scaled_dot_product_attention import scaled_dot_product_attention
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -149,7 +150,13 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.mh_attention import Causal_MHA
+    mha = Causal_MHA(d_model, num_heads)
+    mha.q_proj.weight.data = q_proj_weight
+    mha.k_proj.weight.data = k_proj_weight
+    mha.v_proj.weight.data = v_proj_weight
+    mha.output_proj.weight.data = o_proj_weight
+    return mha(in_features, in_features, in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -189,7 +196,21 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.mh_attention import Causal_MHA
+    from cs336_basics.a_3_llm_structure.rope import Rope
+    rope = Rope(theta=theta, d_k=d_model // num_heads, max_seq_len=max_seq_len)
+    mha = Causal_MHA(d_model, num_heads, rope)
+    mha.q_proj.weight.data = q_proj_weight
+    mha.k_proj.weight.data = k_proj_weight
+    mha.v_proj.weight.data = v_proj_weight
+    mha.output_proj.weight.data = o_proj_weight
+    return mha(
+        in_features,
+        in_features,
+        in_features,
+        token_positions=token_positions,
+    )
+
 
 
 def run_rope(
@@ -286,7 +307,24 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.transformer_block import TransformerBlock
+    from cs336_basics.a_3_llm_structure.rope import Rope
+    rope = Rope(theta=theta, d_k=d_model // num_heads, max_seq_len=max_seq_len)
+    transformer_block = TransformerBlock(d_model, num_heads, d_ff, rope=rope)
+    transformer_block.load_state_dict(
+        {
+            "mha.q_proj.weight": weights["attn.q_proj.weight"],
+            "mha.k_proj.weight": weights["attn.k_proj.weight"],
+            "mha.v_proj.weight": weights["attn.v_proj.weight"],
+            "mha.output_proj.weight": weights["attn.output_proj.weight"],
+            "ln1.weight": weights["ln1.weight"],
+            "ln2.weight": weights["ln2.weight"],
+            "ffn.w1.weight": weights["ffn.w1.weight"],
+            "ffn.w2.weight": weights["ffn.w2.weight"],
+            "ffn.w3.weight": weights["ffn.w3.weight"],
+        }
+    )
+    return transformer_block(in_features)
 
 
 def run_transformer_lm(
@@ -368,7 +406,41 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.a_3_llm_structure.transfomer_lm import TransfomerLM
+    transformer_lm = TransfomerLM(
+        vocab_size,
+        context_length,
+        d_model,
+        num_layers,
+        num_heads,
+        d_ff,
+        rope_theta,
+    )
+    model_weights = {
+        "embedding.weight": weights["token_embeddings.weight"],
+        "ln_final.weight": weights["ln_final.weight"],
+        "lm_head.weight": weights["lm_head.weight"],
+    }
+    for layer_idx in range(num_layers):
+        source_prefix = f"layers.{layer_idx}"
+        target_prefix = f"mha_block.{layer_idx}"
+        model_weights.update(
+            {
+                f"{target_prefix}.mha.q_proj.weight": weights[f"{source_prefix}.attn.q_proj.weight"],
+                f"{target_prefix}.mha.k_proj.weight": weights[f"{source_prefix}.attn.k_proj.weight"],
+                f"{target_prefix}.mha.v_proj.weight": weights[f"{source_prefix}.attn.v_proj.weight"],
+                f"{target_prefix}.mha.output_proj.weight": weights[
+                    f"{source_prefix}.attn.output_proj.weight"
+                ],
+                f"{target_prefix}.ln1.weight": weights[f"{source_prefix}.ln1.weight"],
+                f"{target_prefix}.ln2.weight": weights[f"{source_prefix}.ln2.weight"],
+                f"{target_prefix}.ffn.w1.weight": weights[f"{source_prefix}.ffn.w1.weight"],
+                f"{target_prefix}.ffn.w2.weight": weights[f"{source_prefix}.ffn.w2.weight"],
+                f"{target_prefix}.ffn.w3.weight": weights[f"{source_prefix}.ffn.w3.weight"],
+            }
+        )
+    transformer_lm.load_state_dict(model_weights)
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(
