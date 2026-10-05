@@ -10,6 +10,8 @@ class Embed(nn.Module):
         torch.nn.init.trunc_normal_(self.weight, mean=0, std=1, a=-3, b=3)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        # self.weight = (V, C) | 输入的结构是(B, T)
+        # (V, C)[B, T] => (B, T, C) => 我对pytorch还是不够熟练，有时间要整体学习一下
         return self.weight[token_ids]
         
         
