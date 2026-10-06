@@ -48,3 +48,8 @@ Deliverable: An algebraic expression, with a brief justification.
 (d) Model FLOPs utilization (MFU) is defined as the ratio of observed throughput (tokens per second) relative to the hardware’s theoretical peak FLOP throughput
 [A. Chowdhery et al., 2022]. An NVIDIA H100 GPU has a theoretical peak of 495 teraFLOP/s for “float32” (actually TensorFloat-32, which in reality is “bfloat19”) operations. Assuming you are able to get 50% MFU, how long would it take to train a GPT-2 XL for 400K steps and a batch size of 1024 on a single H100? Following J. Kaplan et al. [25] and J. Hoffmann et al. [26], assume that the backward pass has twice the FLOPs of the forward pass.
 Deliverable: The number of hours training would take, with a brief justification
+
+
+# Problem (learning_rate_schedule):  Implement cosine learning rate schedule with warmup(1 point)
+Write a function that takes 𝑡, 𝛼max, 𝛼min, 𝑇𝑤 and 𝑇𝑐, and returns the learning rate 𝛼𝑡 according to
+the scheduler defined above. Then implement [adapters.get_lr_cosine_schedule] and make sure it passes uv run pytest -k test_get_lr_cosine_schedule.
