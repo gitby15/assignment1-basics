@@ -34,6 +34,9 @@ class Linear(nn.Module):
     # 但是x的形状会是(..., d_in)，所以实际上会变成 Y = x @ W.T
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         assert self._checked_weight_shape == self.weight.shape
+        # 假设x的形状是(B, T, d_in), 那么Y的形状就是(B, T, d_out)
+        # Flops = BT * d_in * d_out
+        # 内存占用：4BT(x) + 4C(weight) + 4BTC(output)
         return einsum(self.weight, x, 'out_f in_f, ... in_f -> ... out_f')
 
 

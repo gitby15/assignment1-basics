@@ -53,3 +53,18 @@ Deliverable: The number of hours training would take, with a brief justification
 # Problem (learning_rate_schedule):  Implement cosine learning rate schedule with warmup(1 point)
 Write a function that takes 𝑡, 𝛼max, 𝛼min, 𝑇𝑤 and 𝑇𝑐, and returns the learning rate 𝛼𝑡 according to
 the scheduler defined above. Then implement [adapters.get_lr_cosine_schedule] and make sure it passes uv run pytest -k test_get_lr_cosine_schedule.
+
+
+# Problem (learning_rate_schedule):  Implement cosine learning rate schedule with warmup (1 point)
+Write a function that takes 𝑡, 𝛼max, 𝛼min, 𝑇𝑤 and 𝑇𝑐, and returns the learning rate 𝛼𝑡 according to the scheduler defined above. Then implement [adapters.get_lr_cosine_schedule] and make sure
+it passes `uv run pytest -k test_get_lr_cosine_schedule`.
+[Deliver]:
+其实就是一个基于总步长 + 当前step + 超参数的一个学习率调整的函数
+讲义里面没有讲，为什么要这样调整学习率，我觉得应该是大量实践总结下来的经验，这样往往效果更好
+
+# Problem (gradient_clipping):  Implement gradient clipping (1 point)
+Write a function that implements gradient clipping. Your function should take a list of parameters
+and a maximum ℓ2
+-norm. It should modify each parameter gradient in place. Use 𝜀 = 10
+−6 (thePyTorch default). Then, implement the adapter [adapters.run_gradient_clipping] and make sure
+it passes `uv run pytest -k test_gradient_clipping`.
