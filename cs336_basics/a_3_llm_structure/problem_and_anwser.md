@@ -161,6 +161,14 @@ Deliverable: A one-to-two sentence response.
 (b) Identify the matrix multiplies required to complete a forward pass of our GPT-2 XL-shaped model. How many FLOPs do these matrix multiplies require in total? Assume that our input sequence has context_length tokens.
 Deliverable: A list of matrix multiplies (with descriptions), and the total number of FLOPs
 required.
+[Deliver]:
+**Embedding**：FLOPs是0，因为只是做了查表操作，在CPU内完成
+假设所有数值都是float32(token_id是int32)，forward时候的内存峰值：[4BT + 4VC + 4BTC]字节
+**Transformer Blocks**: 
+- 有多层，在计算FLOPs的时候需要累加，但是计算内存的时候不需要，因为Blocks现在是串行计算，计算下一个Block的时候，上一个Block不需要保留（以后如果要做Block的残差连接，就另外计算）
+- 单层Block有以下结构：x -> RMSNorm -> MHA -> RMSNorm(残差x) -> SwiGluFFN(残差MHA)
+- - RMSNorm: FLOPs需要 4 * BTC, 内存需要：4BTC(x) + 4BT(temp) + 4BT(_rms output) + 4C(weight) + 4BTC(output)
+- - MHA: 
 
 (c) Based on your analysis above, which parts of the model require the most FLOPs?
 Deliverable: A one-to-two sentence response.

@@ -28,6 +28,8 @@ class Causal_MHA(nn.Module):
         token_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # q 的形状是 (..., seq_len, d_model)
+        # FLOPs = 3BT * C^2 (BTC * C)
+        # 内存占用：新q/k/v一共3 * 4BTC，旧的q/k/v，如果都是同一份数据，就只有4BTC
         q = self.q_proj(q)
         k = self.k_proj(k)
         v = self.v_proj(v)
@@ -39,13 +41,17 @@ class Causal_MHA(nn.Module):
         ).tril()
 
         # [B, T, C（H*D）] -> [B, T, H, D] -> [B, H, T, D]
+        # 这里不需要参与浮点数运算
         q = q.unflatten(-1, (self.num_heads, self.d_k)).transpose(-2, -3)
         k = k.unflatten(-1, (self.num_heads, self.d_k)).transpose(-2, -3)
         v = v.unflatten(-1, (self.num_heads, self.d_v)).transpose(-2, -3)
 
+        # token_positions的形状是：(B, seq_len)
         if self.rope is not None:
+            # prefill场景
             if token_positions is None:
                 token_positions = torch.arange(q.shape[-2], device=q.device)
+            # decode场景
             elif token_positions.ndim == q.ndim - 2:
                 token_positions = token_positions.unsqueeze(-2)
 

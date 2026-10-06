@@ -33,6 +33,8 @@ class Rope(nn.Module):
         x_odd = x[..., 1::2]
 
         # RoPE rotation
+        # 这里的FLOPs加起来，对于(BTC)或者(BTHD)，总共做了两次乘法和一次加(减)法
+        # 总共计算量是3BTC或者3BHTD
         out_even = x_even * cos - x_odd * sin
         out_odd = x_even * sin + x_odd * cos
 
