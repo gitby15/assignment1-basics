@@ -5,8 +5,17 @@ def softmax_origin(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     return torch.exp(x) / torch.exp(x).sum(dim=dim, keepdim=True)
 
 
+'''
+算数强度计算：
+需要搬运的内存数据：
+计算量：假设参数量是N，那么一次Softmax的Flops是5N
+但是这里做了大量的数据搬运（产生了很多次中间变量的生成）
+所以需要做算子融合，减少数据搬运的次数，回头让我研究一下这个算子融合要怎么做
+'''
 
-# 利用e的两个特性：
+
+
+# 利用e的两个特性来防止上溢出：
 # 1. e^a/e^b = e^(a-b)
 # 2. 当a<0时，0 < e^a < 1
 # 内存占用：BTC

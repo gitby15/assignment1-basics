@@ -64,7 +64,5 @@ it passes `uv run pytest -k test_get_lr_cosine_schedule`.
 
 # Problem (gradient_clipping):  Implement gradient clipping (1 point)
 Write a function that implements gradient clipping. Your function should take a list of parameters
-and a maximum ℓ2
--norm. It should modify each parameter gradient in place. Use 𝜀 = 10
-−6 (thePyTorch default). Then, implement the adapter [adapters.run_gradient_clipping] and make sure
+and a maximum ℓ2-norm. It should modify each parameter gradient in place. Use 𝜀 = 10^−6 (thePyTorch default). Then, implement the adapter [adapters.run_gradient_clipping] and make sure
 it passes `uv run pytest -k test_gradient_clipping`.
