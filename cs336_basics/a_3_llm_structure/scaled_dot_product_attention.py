@@ -18,11 +18,23 @@ def scaled_dot_product_attention(
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
     d_k = q.shape[-1]
-
+    # 这里是BTC@BCT => Flops = 2BT^2C
+    # 输出的形状是BTT
+    # 内存占用是BTT
     score = q@k.transpose(-2, -1)
+    # Flops: BT^2
     score = score / torch.sqrt(torch.tensor(d_k, device=q.device, dtype=q.dtype))
+    # 这里主要是内存读写，通常Flops = 0（所以它其实比较花时间对吗？）
+    # 内存占用BT
     if mask is not None:        
         score = score.masked_fill(mask == False, float('-inf'))  # noqa: E712
+    # 卧槽softmax居然要5BTT
+    # 因为形状是BTT，所以Flops是5BTT
+    # 峰值内存占用是3BTT
     score = softmax(score, dim=-1)
+    # score的形状是BTT，所以Flops = BTT*BTC = 2BTTC
+    # BTC
     attention = einsum(score, v, '... t1 t2, ... t2 d -> ... t1 d')
+    # 所以Flops总和是：2BTTC + BTT + 5BTT + 2BTTC ≈ 4BTTC
+    # 总峰值内存是：max(3BTT + BT, BTT + BTC)
     return attention

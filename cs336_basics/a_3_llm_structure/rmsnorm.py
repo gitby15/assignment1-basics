@@ -9,20 +9,22 @@ class RMSNorm(nn.Module):
         # RMSNorm的初始权重就设置成1
         self.weight = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
 
-    # rms(x) = 求平方 -> 计算均值 -> 开根号 + eps
+    # rms(x) = 求平方 -> 计算均值 -> + eps -> 开根号
     # x的形状是(B, T, C)
     # FLOPs
-    # 开平方：BTC， 求平均值：BTC， 开根号：BT(因为求完均值，x的形状只剩BT了)、+ep: BT
-    # (2c+2) * BT 约等于 BTC
+    # 开方：BTC， 求平均值：BTC， 开根号：BT(因为求完均值，x的形状只剩BT了)、+ep: BT
+    # (2c+2) * BT 约等于 2BTC
     def _rms(self, x: torch.Tensor) -> torch.Tensor:
         # 输入形状(B, T, C)
-        # 输出形状(B, T)
+        # 输出形状(B, T, 1), 因为keepdim了
         temp = x.pow(2).mean(dim=-1, keepdim=True) + self.eps
         return torch.sqrt(temp)
     
     # 总FLOPs = 2BTC + 2BTC = 4BTC
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # 约等于2BTC
+        # x/_rms = BTC
+        # self.weight 被广播成BTC，计算量也是BTC
+        # 所以forward这两行，是2BTC，加上_rms函数的2BTC，总计算量就是4BTC
         return x/self._rms(x) * self.weight
 
 

@@ -168,7 +168,7 @@ required.
 - 有多层，在计算FLOPs的时候需要累加，但是计算内存的时候不需要，因为Blocks现在是串行计算，计算下一个Block的时候，上一个Block不需要保留（以后如果要做Block的残差连接，就另外计算）
 - 单层Block有以下结构：x -> RMSNorm -> MHA -> RMSNorm(残差x) -> SwiGluFFN(残差MHA)
 - - RMSNorm: FLOPs需要 4 * BTC, 内存需要：4BTC(x) + 4BT(temp) + 4BT(_rms output) + 4C(weight) + 4BTC(output)
-- - MHA: 
+- - MHA: Flops需要 8BTCC + 6BTC + 4BTTC，注意力计算跟T、C的平方有关，内存占用大约是3BTTC
 
 (c) Based on your analysis above, which parts of the model require the most FLOPs?
 Deliverable: A one-to-two sentence response.

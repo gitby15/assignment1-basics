@@ -28,14 +28,15 @@ class Causal_MHA(nn.Module):
         token_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # q 的形状是 (..., seq_len, d_model)
-        # FLOPs = 3BT * C^2 (BTC * C)
-        # 内存占用：新q/k/v一共3 * 4BTC，旧的q/k/v，如果都是同一份数据，就只有4BTC
+        # FLOPs = 6BT * C^2 = 6BTC^2
+        # 内存占用：新q/k/v一共3 * 4BTC，旧的q/k/v，如果都是同一份数据，就只有4BTC, 另外，还有4C^2(weight)
         q = self.q_proj(q)
         k = self.k_proj(k)
         v = self.v_proj(v)
 
         query_len = q.shape[-2]
         key_len = k.shape[-2]
+        # 内存占用：4BT(mask)
         causal_mask = torch.ones(
             query_len, key_len, device=q.device, dtype=torch.bool
         ).tril()
@@ -55,9 +56,16 @@ class Causal_MHA(nn.Module):
             elif token_positions.ndim == q.ndim - 2:
                 token_positions = token_positions.unsqueeze(-2)
 
+            # rope的Flops：3BTC，这里就是(3 * 2) * B * (token_positions_len) * C
+            # 在prefill的时候是6B(T_q + T_k)C，在Decode的时候，大约是6BC
+            # 简化计算复杂度，我们假设QKV的T相等，所以Flops = 6BTC
             q = self.rope(q, token_positions)
             k = self.rope(k, token_positions)
 
+        # 注意力计算的Flops大约是4BTTC => 4BT^2C
+        # 内存占用
         attention = scaled_dot_product_attention(q, k, v, causal_mask)
         attention = attention.transpose(-3, -2).flatten(start_dim=-2, end_dim=-1)
+        # 线性层Flops = 2BTC^2
+        # 所以总的Flops = 6BTCC + 6BTC + 4BTTC + 2BTCC ≈ 8BTCC + 6BTC + 4BTTC
         return self.output_proj(attention)
