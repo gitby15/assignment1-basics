@@ -16,36 +16,58 @@ class AdamW(torch.optim.Optimizer):
             "eps": eps,
             "weight_decay": weight_decay,
             "current_step": 0,
-            "last_m": {},
-            "last_v": {},
         }
         super().__init__(params, defaults)
 
     def step(self, closure: Callable | None = None):
-        loss = None if closure is None else closure()
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
         with torch.no_grad():
             for group in self.param_groups:
                 group["current_step"] += 1
+                step = group["current_step"]
+
                 lr = group["lr"]
                 beta_1 = group["beta_1"]
                 beta_2 = group["beta_2"]
                 eps = group["eps"]
                 weight_decay = group["weight_decay"]
-                current_step = group["current_step"]
-                last_m = group["last_m"]
-                last_v = group["last_v"]
+
                 for p in group["params"]:
                     if p.grad is None:
                         continue
-                    gt = p.grad
-                    mt = beta_1 * last_m.get(p, 0) + (1 - beta_1) * gt
-                    last_m[p] = mt
-                    mt = mt / (1 - beta_1 ** current_step)
-                    vt = beta_2 * last_v.get(p, 0) + (1 - beta_2) * gt**2
-                    last_v[p] = vt
-                    vt = vt / (1 - beta_2 ** current_step)
-                    at = mt / (vt.sqrt() + eps)
+
+                    grad = p.grad
+                    state = self.state[p]
+
+                    # 初始化参数的优化器状态
+                    if len(state) == 0:
+                        state["m"] = torch.zeros_like(p)
+                        state["v"] = torch.zeros_like(p)
+
+                    m = state["m"]
+                    v = state["v"]
+
+                    # 更新一阶、二阶动量
+                    m.mul_(beta_1).add_(grad, alpha=1 - beta_1)
+                    v.mul_(beta_2).addcmul_(
+                        grad, grad, value=1 - beta_2
+                    )
+
+                    # 偏差修正
+                    m_hat = m / (1 - beta_1 ** step)
+                    v_hat = v / (1 - beta_2 ** step)
+
+                    # AdamW 更新
                     p.mul_(1 - lr * weight_decay)
-                    p.sub_(lr * at)
+                    p.addcdiv_(
+                        m_hat,
+                        v_hat.sqrt().add_(eps),
+                        value=-lr,
+                    )
+
         return loss
 

@@ -66,3 +66,13 @@ it passes `uv run pytest -k test_get_lr_cosine_schedule`.
 Write a function that implements gradient clipping. Your function should take a list of parameters
 and a maximum ℓ2-norm. It should modify each parameter gradient in place. Use 𝜀 = 10^−6 (thePyTorch default). Then, implement the adapter [adapters.run_gradient_clipping] and make sure
 it passes `uv run pytest -k test_gradient_clipping`.
+
+
+# Problem (training_together):  Put it together (4 points)
+Deliverable: Write a script that runs a training loop to train your model on user-provided input.
+In particular, we recommend that your training script allow for (at least) the following:
+• Ability to configure and control the various model and optimizer hyperparameters.
+• Memory-efficient loading of large training and validation datasets with np.memmap.
+• Serializing checkpoints to a user-provided path.
+• Periodically logging training and validation performance (e.g., to console and/or an external
+service like Weights and Biases).
